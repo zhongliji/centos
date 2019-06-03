@@ -1,0 +1,117 @@
+linux连接ISCSI存储
+
+1.关闭sendmail服务，加快启动速度；（这个可以不管它）
+
+2.设置LINUX的IP。
+
+
+3、安装
+   
+   yum -y install iscsi-initiator-utils
+
+   yum -y install device-mapper-multipath
+
+   chkconfig --level 35 multipathd on
+
+   cp /usr/share/doc/device-mapper-multipath-0.4.9/multipath.conf /etc/  (拷贝配置文件到/etc/目录下)
+
+   service multipathd start  （service multipathd status; service multipathd reload ）
+
+   lsmod | grep dm          #检查多路径模块是否加载；
+
+4.使用rpm -qa | grep iscsi命令查看iscsi initiator安装情况
+
+注意：此时要确认iscsi服务启动-->service iscsi start
+
+5.建立multipath多路径文件：
+	A.iscsiadm -m iface -I eth0 -o new 
+	  iscsiadm -m iface -I eth1 -o new （这里有几个网卡用来做数据流，就设置几个网卡的文件：ethx）
+
+
+6.iscsiadm -m discovery -t sendtargets -p IP
+
+7.使用iscsiadm -m node -l可以自动LOGIN所有能连通的存储端的portal（检测session数目iscsiadm -m session)
+
+10.如果主机端看不到分配的LUN，就重启iscsi服务；（看到LUN之后，fdisk -l检查LUN的状况）
+
+11.service multipathd start （启动多路径服务）
+
+vi /etc/multipath.conf
+
+defaults {
+        user_friendly_names yes
+        path_grouping_policy    multibus
+        path_checker            tur
+        failback                immediate
+        no_path_retry           fail
+}
+
+blacklist {
+        devnode "sda"
+}
+
+multipaths {
+        multipath {
+                wwid                    364ed2aa51864120b621ab51c2b9bf4b1
+                alias                   ps6100
+                path_grouping_policy    multibus	  # 路径组策略: failover 为主备模式； multibus 为负载均衡模式
+                failback                immediate
+                rr_weight               priorities
+                no_path_retry           5
+        }
+#       multipath {
+#               wwid                    1DEC_____321816758474
+#               alias                   red
+#       }
+}
+
+
+
+14.multipath –v2 执行配置文件使其生效
+
+15.ll /dev/mapper (查看别名生效，查看硬盘，相当于硬盘管理器中去看）
+
+16.multipath -ll（检查多路径）
+[root@Config59VM0 /]# multipath -ll
+
+ps6100 (364ed2aa51864120b621ab51c2b9bf4b1) dm-3 EQLOGIC,100E-00			# multibus mode loadbalance
+size=40G features='1 queue_if_no_path' hwhandler='0' wp=rw
+`-+- policy='round-robin 0' prio=1 status=active
+  |- 6:0:0:0 sdb 8:16 active ready running
+  |- 7:0:0:0 sdc 8:32 active ready running
+  `- 8:0:0:0 sdd 8:48 active ready running
+
+[root@Config59VM0 bsd]# multipath -ll
+ps6100 (364ed2aa51864120b621ab51c2b9bf4b1) dm-3 EQLOGIC,100E-00			#failover mode 
+size=40G features='1 queue_if_no_path' hwhandler='0' wp=rw
+|-+- policy='round-robin 0' prio=1 status=active
+| `- 6:0:0:0 sdb 8:16 active ready running
+|-+- policy='round-robin 0' prio=1 status=enabled
+| `- 7:0:0:0 sdc 8:32 active ready running
+`-+- policy='round-robin 0' prio=1 status=enabled
+  `- 8:0:0:0 sdd 8:48 active ready running
+
+17.mkfs.ext3 /dev/mapper/ps6100 (用别名来分区）mkfs.ext3 -T  largefile4 /dev/mapper/ps6100 -F(快速格式化大分区)
+
+20.把mount信息写入fstab
+
+/dev/mapper/ps6100      /ps6100     ext4    _netdev,defaults 0 0
+
+
+检查方式：
+
+chkconfig --list iscsi
+iscsi           0:off   1:off   2:off   3:on    4:on    5:on    6:off
+
+chkconfig --level 35 iscsi on（自动启动服务添加）
+
+
+chkconfig --list multipathd
+multipathd      0:off   1:off   2:off   3:on   4:off   5:on   6:off
+
+IO测试：iostat 1
+
+
+
+
+

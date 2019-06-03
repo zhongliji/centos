@@ -1,0 +1,241 @@
+#centos6.x modify hostname script
+
+sed -i "s#`uname -n`#$1#g" /etc/sysconfig/network
+grep $1 /etc/sysconfig/network
+hostname $1
+
+#dynamic configure ip gateway dns
+
+ip a a 192.168.8.70/24 dev eth0
+
+ip r a default via 192.168.8.1 dev eth0
+
+echo "nameserver 61.139.2.69" >> /etc/resolv.conf
+
+#centos7.x modify hostname script
+
+hostnamectl set-hostname $1
+hostname $1
+
+#centos7.x modify network
+
+read -p "interface name:" name
+read -p "ip addr:" addr
+read -p "gateway:" gateway
+read -p "dns:" dns
+
+cat > /etc/sysconfig/network-scripts/ifcfg-$name << EOF
+TYPE=Ethernet
+BOOTPROTO=static
+NAME=$name
+DEVICE=$name
+ONBOOT=yes
+IPADDR=$addr
+PREFIX=24
+GATEWAY=$gateway
+DNS1=$dns
+EOF
+
+systemctl restart network
+
+#create bridge
+
+cat > /etc/sysconfig/network-scripts/ifcfg-eth0 << EOF
+TYPE=Ethernet
+BOOTPROTO=none
+NAME=eth0
+DEVICE=eth0
+ONBOOT=yes
+BRIDGE=br0
+EOF
+
+cat > /etc/sysconfig/network-scripts/ifcfg-br0 << EOF
+TYPE=Bridge
+BOOTPROTO=static
+DEVICE=br0
+ONBOOT=yes
+IPADDR=192.168.8.118
+PREFIX=24
+GATEWAY=192.168.8.1
+DNS1=61.139.2.69
+EOF
+
+#centos6.x modify network
+
+read -p "interface name:" name
+read -p "ip addr:" addr
+read -p "gateway:" gateway
+read -p "dns:" dns
+
+cat > /etc/sysconfig/network-scripts/ifcfg-$name << EOF
+TYPE=Ethernet
+BOOTPROTO=static
+NAME=$name
+DEVICE=$name
+ONBOOT=yes
+IPADDR=$addr
+NETMASK=255.255.255.0
+GATEWAY=$gateway
+EOF
+
+cat > /etc/resolv.conf << EOF
+nameserver $dns
+EOF
+
+service network restart
+
+# bonding interface on centos6.x
+
+read -p "bond name:" name
+read -p "input first interface:" int1
+read -p "input second interface:" int2
+read -p "ip addr:" addr
+read -p "gateway:" gateway
+read -p "dns:" dns
+
+cat > /etc/sysconfig/network-scripts/ifcfg-$name << EOF
+DEVICE=$name
+BOOTPROTO=none
+ONBOOT=yes
+IPADDR=$addr
+NETMASK=255.255.255.0
+GATEWAY=$gateway
+USERCTL=no
+EOF
+
+cat >  /etc/sysconfig/network-scripts/ifcfg-$int1 << EOF
+DEVICE=$int1
+BOOTPROTO=none
+ONBOOT=yes 
+MASTER=$name
+SLAVE=yes   
+USERCTL=no
+EOF
+
+cat >  /etc/sysconfig/network-scripts/ifcfg-$int2 << EOF
+DEVICE=$int2
+BOOTPROTO=none
+ONBOOT=yes 
+MASTER=$name
+SLAVE=yes   
+USERCTL=no
+EOF
+
+cat >> /etc/modprobe.d/dist.conf << EOF
+alias $name bonding
+options $name mode=1 miimon=100
+EOF
+
+cat > /etc/resolv.conf << EOF
+nameserver $dns
+EOF
+
+reboot
+
+
+chkconfig iptables off
+chkconfig ip6tables off
+service iptables stop
+service ip6tables stop
+
+#bond for centos7.2
+
+read -p "bond name:" name
+read -p "input first interface:" int1
+read -p "input second interface:" int2
+read -p "input bond type:" type
+read -p "ip addr:" addr
+read -p "gateway:" gateway
+read -p "dns:" dns
+
+modprobe --first-time bonding
+
+cat > /etc/sysconfig/network-scripts/ifcfg-$name << EOF
+TYPE=Bond
+BOOTPROTO=none
+NAME=$name
+DEVICE=$name
+ONBOOT=yes
+IPADDR=$addr
+PREFIX=24
+GATEWAY=$gateway
+DNS1=$dns
+BONDING_MASTER=yes
+BONDING_OPTS="mode=$type miimon=100"
+EOF
+
+cat > /etc/sysconfig/network-scripts/ifcfg-$int1 << EOF
+TYPE=Ethernet
+BOOTPROTO=none
+NAME=$int1
+DEVICE=$int1
+ONBOOT=yes
+MASTER=$name
+SLAVE=yes
+EOF
+
+cat > /etc/sysconfig/network-scripts/ifcfg-$int2 << EOF
+TYPE=Ethernet
+BOOTPROTO=none
+NAME=$int2
+DEVICE=$int2
+ONBOOT=yes
+MASTER=$name
+SLAVE=yes
+EOF
+
+
+#bridge for centos7.2
+
+read -p "bond name:" name
+read -p "bridge name:" br
+read -p "input first interface:" int1
+read -p "input second interface:" int2
+read -p "input bond type:" type
+read -p "ip addr:" addr
+read -p "gateway:" gateway
+read -p "dns:" dns
+
+modprobe --first-time bonding
+
+cat > /etc/sysconfig/network-scripts/ifcfg-$name << EOF
+TYPE=Bond
+BOOTPROTO=none
+NAME=$name
+DEVICE=$name
+ONBOOT=yes
+BONDING_MASTER=yes
+BONDING_OPTS="mode=$type miimon=100"
+BRIDGE=$br
+EOF
+
+cat > /etc/sysconfig/network-scripts/ifcfg-$int1 << EOF
+TYPE=Ethernet
+BOOTPROTO=none
+NAME=$int1
+DEVICE=$int1
+ONBOOT=yes
+MASTER=$name
+SLAVE=yes
+EOF
+
+cat > /etc/sysconfig/network-scripts/ifcfg-$int2 << EOF
+TYPE=Ethernet
+BOOTPROTO=none
+NAME=$int2
+DEVICE=$int2
+ONBOOT=yes
+MASTER=$name
+SLAVE=yes
+EOF
+
+cat > /etc/sysconfig/network-scripts/ifcfg-$br << EOF
+TYPE=Bridge
+BOOTPROTO=static
+DEVICE=$br
+ONBOOT=yes
+IPADDR=$addr
+PREFIX=24
+GATEWAY=$gateway
+DNS1=$dns
+EOF

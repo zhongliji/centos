@@ -1,0 +1,60 @@
+fdisk /dev/sda   #echo $[1024*20] 20g size MB
+type: p   #print
+type: n   #new part
+type: t   #part type
+type: 8e  #part lvm
+type: w   #write part table
+
+partprobe  #sync part table
+
+pvs  #view exist pv
+
+pvcreate /dev/sda3   #new pv
+
+vgs  #view exist vg
+
+vgextend centos /dev/sda3  #extend vg size
+
+lvs  #view exist lv
+
+lvextend -l +100%free /dev/centos/root   #extend lv to all vg size
+
+lvextend -L +10g /dev/centos/root  #extend lv add 10g size from vg
+
+df -h   #view root part size 
+
+xfs_growfs /dev/centos/root   #extend xfs filesystem at root part
+
+
+
+vgcreate vg01 /dev/sdb /dev/sdc #new vg
+
+lvcreate -L 20G -n lv1 vg01  #new 20G size lv from vg01
+
+lvcreate -l 100%free -n lv1 vg01  #new all size lv from vg01
+
+resize2fs /dev/vg01/lv1  #extend ext3/ext4 filesystem munt umount first
+
+
+https://access.redhat.com/documentation/zh-CN/Red_Hat_Enterprise_Linux/6/html/Cluster_Administration/s1-halvm-tagging-CA.html
+
+编辑/etc/lvm/lvm.config，修改locking_type和volume_list（红色部分改为该配置文件所在主机的主机名）
+locking_type = 1
+volume_list = [ "VolGroup", “@XZCS931A1” ]（这个文件每台服务器上都要配置，红色部分换成服务器自己的主机名）
+注意：/etc/lvm.lvm.conf文件在集群另一台服务器也需要进行修改。
+
+修改内核(两台都要执行)
+
+# dracut -H -f /boot/initramfs-$(uname -r).img $(uname -r)
+
+lvscan
+
+lvchange -ay /dev/vg1/lv1
+
+
+
+
+
+
+
+
